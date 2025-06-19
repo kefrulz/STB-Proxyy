@@ -31,4 +31,21 @@ chris230291/stb-proxy:latest
 - Map whichever port you like to the default `8001`
 - `HOST` should be the docker hosts ip + the port you chose
 - Mounting `/config` is required for settings to persist through restarts
-- To configure go to the `HOST` in a browser eg 10.0.1.200:8084
+- To configure go to the `HOST` in a browser eg <http://10.0.1.200:8084>
+
+## Local Installation
+
+To run without Docker install the Python dependencies and start the application:
+
+```bash
+pip install -r requirements.txt
+```
+
+Optionally set the `CONFIG` environment variable to specify a configuration file path.
+Then run:
+
+```bash
+python3 app.py
+```
+
+You can choose either Docker or local installation depending on your environment.
