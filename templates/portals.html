@@ -23,7 +23,11 @@
                     data-enabled="{{ portals[portal].enabled }}" data-name="{{ portals[portal].name }}"
                     data-url="{{ portals[portal].url }}" data-proxy="{{ portals[portal].proxy }}"
                     data-macs="{{ portals[portal].macs|join(',') }}"
-                    data-streamsPerMac="{{ portals[portal]['streams per mac'] }}" data-bs-toggle="modal"
+                    data-streamsPerMac="{{ portals[portal]['streams per mac'] }}" 
+                    data-type="{{ portals[portal].type }}" 
+                    data-username="{{ portals[portal].username }}" 
+                    data-password="{{ portals[portal].password }}" 
+                    data-bs-toggle="modal"
                     data-bs-target="#modalEdit">
                     <i class="me-2 fa fa-server"{{ "hidden" if portals[portal].enabled =='false' }}></i>
                     <i class="me-2 fa fa-ban"{{ "hidden" if portals[portal].enabled =='true' }}></i>
@@ -64,6 +68,14 @@
 
                 <form action="/portal/add" method="post">
 
+                    <h6>Type:</h6>
+                    <select name="type" id="addType" class="form-select">
+                        <option value="stalker" selected>Stalker</option>
+                        <option value="xtream">Xtream</option>
+                    </select>
+
+                    <br><br>
+
                     <h6>Name:</h6>
                     <input type="text" name="name" class="form-control flex-fill" title="Name" required>
                     <span class="text-muted">Give this portal a name.</span>
@@ -84,18 +96,32 @@
 
                     <br><br>
 
-                    <h6>MACs:</h6>
-                    <input type="text" name="macs" class="form-control flex-fill" title="MACs" required>
-                    <span class="text-muted">Enter a comma seperated list of MAC adresses.</span>
+                    <div id="stalkerAdd">
+                        <h6>MACs:</h6>
+                        <input type="text" name="macs" class="form-control flex-fill" title="MACs">
+                        <span class="text-muted">Enter a comma seperated list of MAC adresses.</span>
 
-                    <br><br>
+                        <br><br>
 
-                    <h6>Streams Per MAC:</h6>
-                    <input type="number" name="streams per mac" class="form-control flex-fill" title="Streams Per Mac"
-                        min="0" value="1" required>
-                    <span class="text-muted">How many streams does each MAC allow. 0 = unlimited.</span>
+                        <h6>Streams Per MAC:</h6>
+                        <input type="number" name="streams per mac" class="form-control flex-fill" title="Streams Per Mac"
+                            min="0" value="1">
+                        <span class="text-muted">How many streams does each MAC allow. 0 = unlimited.</span>
 
-                    <br><br>
+                        <br><br>
+                    </div>
+
+                    <div id="xtreamAdd" style="display:none;">
+                        <h6>Username:</h6>
+                        <input type="text" name="username" class="form-control flex-fill" title="Username">
+
+                        <br><br>
+
+                        <h6>Password:</h6>
+                        <input type="text" name="password" class="form-control flex-fill" title="Password">
+
+                        <br><br>
+                    </div>
 
                     <div class="modal-footer">
                         <button class="btn btn-secondary" title="Cancel" data-bs-dismiss="modal">Cancel</button>
@@ -127,6 +153,14 @@
                     <input name="id" id="editId" hidden>
                     <input type="checkbox" name="retest" id="retest" value="true" hidden>
 
+                    <h6>Type:</h6>
+                    <select name="type" id="editType" class="form-select">
+                        <option value="stalker">Stalker</option>
+                        <option value="xtream">Xtream</option>
+                    </select>
+
+                    <br><br>
+
                     <h6>Name:</h6>
                     <input type="text" name="name" id="editName" class="form-control flex-fill" title="Name" required>
                     <span class="text-muted">Give this portal a name.</span>
@@ -147,18 +181,32 @@
 
                     <br><br>
 
-                    <h6>MACs:</h6>
-                    <input type="text" name="macs" id="editMacs" class="form-control flex-fill" title="MACs" required>
-                    <span class="text-muted">Enter a comma seperated list of MAC adresses.</span>
+                    <div id="stalkerEdit">
+                        <h6>MACs:</h6>
+                        <input type="text" name="macs" id="editMacs" class="form-control flex-fill" title="MACs">
+                        <span class="text-muted">Enter a comma seperated list of MAC adresses.</span>
 
-                    <br><br>
+                        <br><br>
 
-                    <h6>Streams Per MAC:</h6>
-                    <input type="number" name="streams per mac" id="editStreamsPerMac" class="form-control flex-fill"
-                        title="Streams Per MAC" min="0" required>
-                    <span class="text-muted">How many streams does each MAC allow. 0 = unlimited.</span>
+                        <h6>Streams Per MAC:</h6>
+                        <input type="number" name="streams per mac" id="editStreamsPerMac" class="form-control flex-fill"
+                            title="Streams Per MAC" min="0">
+                        <span class="text-muted">How many streams does each MAC allow. 0 = unlimited.</span>
 
-                    <br><br>
+                        <br><br>
+                    </div>
+
+                    <div id="xtreamEdit" style="display:none;">
+                        <h6>Username:</h6>
+                        <input type="text" name="username" id="editUsername" class="form-control flex-fill" title="Username">
+
+                        <br><br>
+
+                        <h6>Password:</h6>
+                        <input type="text" name="password" id="editPassword" class="form-control flex-fill" title="Password">
+
+                        <br><br>
+                    </div>
 
                     <div class="modal-footer">
                         <button class="btn btn-danger me-auto" title="Delete" form="delete"
@@ -196,6 +244,29 @@
 
     }
 
+    document.getElementById('addType').addEventListener('change', function () {
+        if (this.value == 'xtream') {
+            document.getElementById('xtreamAdd').style.display = '';
+            document.getElementById('stalkerAdd').style.display = 'none';
+        } else {
+            document.getElementById('xtreamAdd').style.display = 'none';
+            document.getElementById('stalkerAdd').style.display = '';
+        }
+    });
+
+    document.getElementById('editType').addEventListener('change', function () {
+        if (this.value == 'xtream') {
+            document.getElementById('xtreamEdit').style.display = '';
+            document.getElementById('stalkerEdit').style.display = 'none';
+        } else {
+            document.getElementById('xtreamEdit').style.display = 'none';
+            document.getElementById('stalkerEdit').style.display = '';
+        }
+    });
+
+    document.getElementById('addType').dispatchEvent(new Event('change'));
+    document.getElementById('editType').dispatchEvent(new Event('change'));
+
     var editModal = document.getElementById('modalEdit');
     editModal.addEventListener('show.bs.modal', function (event) {
         var button = event.relatedTarget;
@@ -206,6 +277,9 @@
         var proxy = button.getAttribute('data-proxy');
         var macs = button.getAttribute('data-macs');
         var streamsPerMac = button.getAttribute('data-streamsPerMac');
+        var type = button.getAttribute('data-type');
+        var username = button.getAttribute('data-username');
+        var password = button.getAttribute('data-password');
         document.getElementById('editId').value = id;
         if (enabled == "true") {
             document.getElementById('editEnabled').checked = true;
@@ -217,6 +291,16 @@
         document.getElementById('editProxy').value = proxy;
         document.getElementById('editMacs').value = macs;
         document.getElementById('editStreamsPerMac').value = streamsPerMac;
+        document.getElementById('editType').value = type;
+        document.getElementById('editUsername').value = username;
+        document.getElementById('editPassword').value = password;
+        if (type == 'xtream') {
+            document.getElementById('xtreamEdit').style.display = '';
+            document.getElementById('stalkerEdit').style.display = 'none';
+        } else {
+            document.getElementById('xtreamEdit').style.display = 'none';
+            document.getElementById('stalkerEdit').style.display = '';
+        }
         document.getElementById('deleteId').value = id;
         document.getElementById('deleteName').value = name;
         document.getElementById('retest').checked = false;
