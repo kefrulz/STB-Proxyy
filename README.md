@@ -11,6 +11,7 @@
 - Override epg
 - Set fallback channels
 - Support for multiple MACs/Streams per Portal
+- Xtream Codes portal support
 
 
 # Setup

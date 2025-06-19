@@ -16,6 +16,7 @@ RUN pip3 install \
 # Copy files
 COPY /app.py /app/app.py
 COPY /stb.py /app/stb.py
+COPY /xtream.py /app/xtream.py
 COPY /templates /app/templates
 COPY /static /app/static
 

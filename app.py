@@ -1,5 +1,6 @@
 import flask
 import stb
+import xtream
 import os
 import json
 import subprocess
@@ -73,10 +74,13 @@ defaultSettings = {
 
 defaultPortal = {
     "enabled": "true",
+    "type": "stalker",
     "name": "",
     "url": "",
     "macs": {},
     "streams per mac": "1",
+    "username": "",
+    "password": "",
     "proxy": "",
     "enabled channels": [],
     "custom channel names": {},
@@ -200,65 +204,88 @@ def portals():
 def portalsAdd():
     id = uuid.uuid4().hex
     enabled = "true"
+    portalType = request.form.get("type", "stalker")
     name = request.form["name"]
     url = request.form["url"]
-    macs = list(set(request.form["macs"].split(",")))
-    streamsPerMac = request.form["streams per mac"]
+    macs = list(set(request.form.get("macs", "").split(",")))
+    streamsPerMac = request.form.get("streams per mac", "1")
+    username = request.form.get("username", "")
+    password = request.form.get("password", "")
     proxy = request.form["proxy"]
-
-    if not url.endswith(".php"):
-        url = stb.getUrl(url, proxy)
-        if not url:
-            logger.error("Error getting URL for Portal({})".format(name))
-            flash("Error getting URL for Portal({})".format(name), "danger")
-            return redirect("/portals", code=302)
 
     macsd = {}
 
-    for mac in macs:
-        token = stb.getToken(url, mac, proxy)
-        if token:
-            stb.getProfile(url, mac, token, proxy)
-            expiry = stb.getExpires(url, mac, token, proxy)
-            if expiry:
-                macsd[mac] = expiry
-                logger.info(
-                    "Successfully tested MAC({}) for Portal({})".format(mac, name)
-                )
-                flash(
-                    "Successfully tested MAC({}) for Portal({})".format(mac, name),
-                    "success",
-                )
-                continue
-
-        logger.error("Error testing MAC({}) for Portal({})".format(mac, name))
-        flash("Error testing MAC({}) for Portal({})".format(mac, name), "danger")
-
-    if len(macsd) > 0:
-        portal = {
-            "enabled": enabled,
-            "name": name,
-            "url": url,
-            "macs": macsd,
-            "streams per mac": streamsPerMac,
-            "proxy": proxy,
-        }
-
-        for setting, default in defaultPortal.items():
-            if not portal.get(setting):
-                portal[setting] = default
-
-        portals = getPortals()
-        portals[id] = portal
-        savePortals(portals)
-        logger.info("Portal({}) added!".format(portal["name"]))
-
+    if portalType == "xtream":
+        test = xtream.getAllChannels(url, username, password, proxy)
+        if test is not None:
+            portal = {
+                "enabled": enabled,
+                "type": portalType,
+                "name": name,
+                "url": url,
+                "username": username,
+                "password": password,
+                "macs": {},
+                "streams per mac": "0",
+                "proxy": proxy,
+            }
+        else:
+            logger.error("Error testing Xtream Portal({})".format(name))
+            flash("Error testing Xtream Portal({})".format(name), "danger")
+            return redirect("/portals", code=302)
     else:
-        logger.error(
-            "None of the MACs tested OK for Portal({}). Adding not successfull".format(
-                name
+        if not url.endswith(".php"):
+            url = stb.getUrl(url, proxy)
+            if not url:
+                logger.error("Error getting URL for Portal({})".format(name))
+                flash("Error getting URL for Portal({})".format(name), "danger")
+                return redirect("/portals", code=302)
+
+        for mac in macs:
+            token = stb.getToken(url, mac, proxy)
+            if token:
+                stb.getProfile(url, mac, token, proxy)
+                expiry = stb.getExpires(url, mac, token, proxy)
+                if expiry:
+                    macsd[mac] = expiry
+                    logger.info(
+                        "Successfully tested MAC({}) for Portal({})".format(mac, name)
+                    )
+                    flash(
+                        "Successfully tested MAC({}) for Portal({})".format(mac, name),
+                        "success",
+                    )
+                    continue
+
+            logger.error("Error testing MAC({}) for Portal({})".format(mac, name))
+            flash("Error testing MAC({}) for Portal({})".format(mac, name), "danger")
+
+        if len(macsd) > 0:
+            portal = {
+                "enabled": enabled,
+                "type": portalType,
+                "name": name,
+                "url": url,
+                "macs": macsd,
+                "streams per mac": streamsPerMac,
+                "proxy": proxy,
+            }
+        else:
+            logger.error(
+                "None of the MACs tested OK for Portal({}). Adding not successfull".format(
+                    name
+                )
             )
-        )
+            return redirect("/portals", code=302)
+
+    for setting, default in defaultPortal.items():
+        if not portal.get(setting):
+            portal[setting] = default
+
+    portals = getPortals()
+    portals[id] = portal
+    savePortals(portals)
+    logger.info("Portal({}) added!".format(portal["name"]))
 
     return redirect("/portals", code=302)
 
@@ -270,66 +297,85 @@ def portalUpdate():
     enabled = request.form.get("enabled", "false")
     name = request.form["name"]
     url = request.form["url"]
-    newmacs = list(set(request.form["macs"].split(",")))
-    streamsPerMac = request.form["streams per mac"]
+    newmacs = list(set(request.form.get("macs", "").split(",")))
+    streamsPerMac = request.form.get("streams per mac", "1")
+    username = request.form.get("username", "")
+    password = request.form.get("password", "")
     proxy = request.form["proxy"]
     retest = request.form.get("retest", None)
 
-    if not url.endswith(".php"):
-        url = stb.getUrl(url, proxy)
-        if not url:
-            logger.error("Error getting URL for Portal({})".format(name))
-            flash("Error getting URL for Portal({})".format(name), "danger")
-            return redirect("/portals", code=302)
-
     portals = getPortals()
-    oldmacs = portals[id]["macs"]
+    portalType = portals[id].get("type", "stalker")
     macsout = {}
-    deadmacs = []
 
-    for mac in newmacs:
-        if retest or mac not in oldmacs.keys():
-            token = stb.getToken(url, mac, proxy)
-            if token:
-                stb.getProfile(url, mac, token, proxy)
-                expiry = stb.getExpires(url, mac, token, proxy)
-                if expiry:
-                    macsout[mac] = expiry
-                    logger.info(
-                        "Successfully tested MAC({}) for Portal({})".format(mac, name)
-                    )
-                    flash(
-                        "Successfully tested MAC({}) for Portal({})".format(mac, name),
-                        "success",
-                    )
-
-            if mac not in list(macsout.keys()):
-                deadmacs.append(mac)
-
-        if mac in oldmacs.keys() and mac not in deadmacs:
-            macsout[mac] = oldmacs[mac]
-
-        if mac not in macsout.keys():
-            logger.error("Error testing MAC({}) for Portal({})".format(mac, name))
-            flash("Error testing MAC({}) for Portal({})".format(mac, name), "danger")
-
-    if len(macsout) > 0:
-        portals[id]["enabled"] = enabled
-        portals[id]["name"] = name
-        portals[id]["url"] = url
-        portals[id]["macs"] = macsout
-        portals[id]["streams per mac"] = streamsPerMac
-        portals[id]["proxy"] = proxy
-        savePortals(portals)
-        logger.info("Portal({}) updated!".format(name))
-        flash("Portal({}) updated!".format(name), "success")
-
+    if portalType == "xtream":
+        test = xtream.getAllChannels(url, username or portals[id].get("username"), password or portals[id].get("password"), proxy)
+        if test is not None:
+            portals[id]["enabled"] = enabled
+            portals[id]["name"] = name
+            portals[id]["url"] = url
+            portals[id]["username"] = username or portals[id].get("username")
+            portals[id]["password"] = password or portals[id].get("password")
+            portals[id]["proxy"] = proxy
+            savePortals(portals)
+            logger.info("Portal({}) updated!".format(name))
+            flash("Portal({}) updated!".format(name), "success")
+        else:
+            logger.error("Error testing Xtream Portal({})".format(name))
+            flash("Error testing Xtream Portal({})".format(name), "danger")
     else:
-        logger.error(
-            "None of the MACs tested OK for Portal({}). Adding not successfull".format(
-                name
+        if not url.endswith(".php"):
+            url = stb.getUrl(url, proxy)
+            if not url:
+                logger.error("Error getting URL for Portal({})".format(name))
+                flash("Error getting URL for Portal({})".format(name), "danger")
+                return redirect("/portals", code=302)
+
+        oldmacs = portals[id]["macs"]
+        deadmacs = []
+
+        for mac in newmacs:
+            if retest or mac not in oldmacs.keys():
+                token = stb.getToken(url, mac, proxy)
+                if token:
+                    stb.getProfile(url, mac, token, proxy)
+                    expiry = stb.getExpires(url, mac, token, proxy)
+                    if expiry:
+                        macsout[mac] = expiry
+                        logger.info(
+                            "Successfully tested MAC({}) for Portal({})".format(mac, name)
+                        )
+                        flash(
+                            "Successfully tested MAC({}) for Portal({})".format(mac, name),
+                            "success",
+                        )
+
+                if mac not in list(macsout.keys()):
+                    deadmacs.append(mac)
+
+            if mac in oldmacs.keys() and mac not in deadmacs:
+                macsout[mac] = oldmacs[mac]
+
+            if mac not in macsout.keys():
+                logger.error("Error testing MAC({}) for Portal({})".format(mac, name))
+                flash("Error testing MAC({}) for Portal({})".format(mac, name), "danger")
+
+        if len(macsout) > 0:
+            portals[id]["enabled"] = enabled
+            portals[id]["name"] = name
+            portals[id]["url"] = url
+            portals[id]["macs"] = macsout
+            portals[id]["streams per mac"] = streamsPerMac
+            portals[id]["proxy"] = proxy
+            savePortals(portals)
+            logger.info("Portal({}) updated!".format(name))
+            flash("Portal({}) updated!".format(name), "success")
+        else:
+            logger.error(
+                "None of the MACs tested OK for Portal({}). Adding not successfull".format(
+                    name
+                )
             )
-        )
 
     return redirect("/portals", code=302)
 
@@ -362,8 +408,9 @@ def editor_data():
         if portals[portal]["enabled"] == "true":
             portalName = portals[portal]["name"]
             url = portals[portal]["url"]
-            macs = list(portals[portal]["macs"].keys())
             proxy = portals[portal]["proxy"]
+            portalType = portals[portal].get("type", "stalker")
+            macs = list(portals[portal]["macs"].keys())
             enabledChannels = portals[portal].get("enabled channels", [])
             customChannelNames = portals[portal].get("custom channel names", {})
             customGenres = portals[portal].get("custom genres", {})
@@ -371,16 +418,24 @@ def editor_data():
             customEpgIds = portals[portal].get("custom epg ids", {})
             fallbackChannels = portals[portal].get("fallback channels", {})
 
-            for mac in macs:
+            if portalType == "xtream":
                 try:
-                    token = stb.getToken(url, mac, proxy)
-                    stb.getProfile(url, mac, token, proxy)
-                    allChannels = stb.getAllChannels(url, mac, token, proxy)
-                    genres = stb.getGenreNames(url, mac, token, proxy)
-                    break
+                    allChannels = xtream.getAllChannels(url, portals[portal].get("username"), portals[portal].get("password"), proxy)
+                    genres = xtream.getGenreNames(url, portals[portal].get("username"), portals[portal].get("password"), proxy)
                 except:
                     allChannels = None
                     genres = None
+            else:
+                for mac in macs:
+                    try:
+                        token = stb.getToken(url, mac, proxy)
+                        stb.getProfile(url, mac, token, proxy)
+                        allChannels = stb.getAllChannels(url, mac, token, proxy)
+                        genres = stb.getGenreNames(url, mac, token, proxy)
+                        break
+                    except:
+                        allChannels = None
+                        genres = None
 
             if allChannels and genres:
                 for channel in allChannels:
@@ -577,23 +632,32 @@ def playlist():
             if len(enabledChannels) != 0:
                 name = portals[portal]["name"]
                 url = portals[portal]["url"]
-                macs = list(portals[portal]["macs"].keys())
                 proxy = portals[portal]["proxy"]
+                portalType = portals[portal].get("type", "stalker")
+                macs = list(portals[portal]["macs"].keys())
                 customChannelNames = portals[portal].get("custom channel names", {})
                 customGenres = portals[portal].get("custom genres", {})
                 customChannelNumbers = portals[portal].get("custom channel numbers", {})
                 customEpgIds = portals[portal].get("custom epg ids", {})
 
-                for mac in macs:
+                if portalType == "xtream":
                     try:
-                        token = stb.getToken(url, mac, proxy)
-                        stb.getProfile(url, mac, token, proxy)
-                        allChannels = stb.getAllChannels(url, mac, token, proxy)
-                        genres = stb.getGenreNames(url, mac, token, proxy)
-                        break
+                        allChannels = xtream.getAllChannels(url, portals[portal].get("username"), portals[portal].get("password"), proxy)
+                        genres = xtream.getGenreNames(url, portals[portal].get("username"), portals[portal].get("password"), proxy)
                     except:
                         allChannels = None
                         genres = None
+                else:
+                    for mac in macs:
+                        try:
+                            token = stb.getToken(url, mac, proxy)
+                            stb.getProfile(url, mac, token, proxy)
+                            allChannels = stb.getAllChannels(url, mac, token, proxy)
+                            genres = stb.getGenreNames(url, mac, token, proxy)
+                            break
+                        except:
+                            allChannels = None
+                            genres = None
 
                 if allChannels and genres:
                     for channel in allChannels:
@@ -668,23 +732,32 @@ def xmltv():
             if len(enabledChannels) != 0:
                 name = portals[portal]["name"]
                 url = portals[portal]["url"]
-                macs = list(portals[portal]["macs"].keys())
                 proxy = portals[portal]["proxy"]
+                portalType = portals[portal].get("type", "stalker")
+                macs = list(portals[portal]["macs"].keys())
                 customChannelNames = portals[portal].get("custom channel names", {})
                 customEpgIds = portals[portal].get("custom epg ids", {})
 
-                for mac in macs:
+                if portalType == "xtream":
                     try:
-                        token = stb.getToken(url, mac, proxy)
-                        stb.getProfile(url, mac, token, proxy)
-                        allChannels = stb.getAllChannels(url, mac, token, proxy)
-                        epg = stb.getEpg(url, mac, token, 24, proxy)
-                        break
+                        allChannels = xtream.getAllChannels(url, portals[portal].get("username"), portals[portal].get("password"), proxy)
+                        epg = None
                     except:
                         allChannels = None
                         epg = None
+                else:
+                    for mac in macs:
+                        try:
+                            token = stb.getToken(url, mac, proxy)
+                            stb.getProfile(url, mac, token, proxy)
+                            allChannels = stb.getAllChannels(url, mac, token, proxy)
+                            epg = stb.getEpg(url, mac, token, 24, proxy)
+                            break
+                        except:
+                            allChannels = None
+                            epg = None
 
-                if allChannels and epg:
+                if allChannels:
                     for c in allChannels:
                         try:
                             channelId = c.get("id")
@@ -702,35 +775,36 @@ def xmltv():
                                     channelEle, "display-name"
                                 ).text = channelName
                                 ET.SubElement(channelEle, "icon", src=c.get("logo"))
-                                for p in epg.get(channelId):
-                                    try:
-                                        start = (
-                                            datetime.utcfromtimestamp(
-                                                p.get("start_timestamp")
-                                            ).strftime("%Y%m%d%H%M%S")
-                                            + " +0000"
-                                        )
-                                        stop = (
-                                            datetime.utcfromtimestamp(
-                                                p.get("stop_timestamp")
-                                            ).strftime("%Y%m%d%H%M%S")
-                                            + " +0000"
-                                        )
-                                        programmeEle = ET.SubElement(
-                                            programmes,
-                                            "programme",
-                                            start=start,
-                                            stop=stop,
-                                            channel=epgId,
-                                        )
-                                        ET.SubElement(
-                                            programmeEle, "title"
-                                        ).text = p.get("name")
-                                        ET.SubElement(
-                                            programmeEle, "desc"
-                                        ).text = p.get("descr")
-                                    except:
-                                        pass
+                                if epg:
+                                    for p in epg.get(channelId, []):
+                                        try:
+                                            start = (
+                                                datetime.utcfromtimestamp(
+                                                    p.get("start_timestamp")
+                                                ).strftime("%Y%m%d%H%M%S")
+                                                + " +0000"
+                                            )
+                                            stop = (
+                                                datetime.utcfromtimestamp(
+                                                    p.get("stop_timestamp")
+                                                ).strftime("%Y%m%d%H%M%S")
+                                                + " +0000"
+                                            )
+                                            programmeEle = ET.SubElement(
+                                                programmes,
+                                                "programme",
+                                                start=start,
+                                                stop=stop,
+                                                channel=epgId,
+                                            )
+                                            ET.SubElement(
+                                                programmeEle, "title"
+                                            ).text = p.get("name")
+                                            ET.SubElement(
+                                                programmeEle, "desc"
+                                            ).text = p.get("descr")
+                                        except:
+                                            pass
                         except:
                             pass
                 else:
@@ -832,9 +906,12 @@ def channel(portalId, channelId):
     portal = getPortals().get(portalId)
     portalName = portal.get("name")
     url = portal.get("url")
+    portalType = portal.get("type", "stalker")
     macs = list(portal["macs"].keys())
     streamsPerMac = int(portal.get("streams per mac"))
     proxy = portal.get("proxy")
+    username = portal.get("username")
+    password = portal.get("password")
     web = request.args.get("web")
     ip = request.remote_addr
 
@@ -843,6 +920,37 @@ def channel(portalId, channelId):
     )
 
     freeMac = False
+
+    if portalType == "xtream":
+        link = url.rstrip('/') + "/live/" + username + "/" + password + "/" + channelId + ".ts"
+        if getSettings().get("stream method", "ffmpeg") == "ffmpeg":
+            ffmpegcmd = str(getSettings()["ffmpeg command"])
+            ffmpegcmd = ffmpegcmd.replace("<url>", link)
+            ffmpegcmd = ffmpegcmd.replace(
+                "<timeout>", str(int(getSettings()["ffmpeg timeout"]) * int(1000000))
+            )
+            if proxy:
+                ffmpegcmd = ffmpegcmd.replace("<proxy>", proxy)
+            else:
+                ffmpegcmd = ffmpegcmd.replace("-http_proxy <proxy>", "")
+            ffmpegcmd = " ".join(ffmpegcmd.split()).split()
+
+            def gen():
+                with subprocess.Popen(
+                    ffmpegcmd,
+                    stdin=subprocess.DEVNULL,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL,
+                ) as sp:
+                    while True:
+                        chunk = sp.stdout.read(1024)
+                        if len(chunk) == 0:
+                            break
+                        yield chunk
+
+            return Response(gen(), mimetype="application/octet-stream")
+        else:
+            return redirect(link)
 
     for mac in macs:
         channels = None
@@ -1133,19 +1241,26 @@ def lineup():
             if len(enabledChannels) != 0:
                 name = portals[portal]["name"]
                 url = portals[portal]["url"]
-                macs = list(portals[portal]["macs"].keys())
                 proxy = portals[portal]["proxy"]
+                portalType = portals[portal].get("type", "stalker")
+                macs = list(portals[portal]["macs"].keys())
                 customChannelNames = portals[portal].get("custom channel names", {})
                 customChannelNumbers = portals[portal].get("custom channel numbers", {})
 
-                for mac in macs:
+                if portalType == "xtream":
                     try:
-                        token = stb.getToken(url, mac, proxy)
-                        stb.getProfile(url, mac, token, proxy)
-                        allChannels = stb.getAllChannels(url, mac, token, proxy)
-                        break
+                        allChannels = xtream.getAllChannels(url, portals[portal].get("username"), portals[portal].get("password"), proxy)
                     except:
                         allChannels = None
+                else:
+                    for mac in macs:
+                        try:
+                            token = stb.getToken(url, mac, proxy)
+                            stb.getProfile(url, mac, token, proxy)
+                            allChannels = stb.getAllChannels(url, mac, token, proxy)
+                            break
+                        except:
+                            allChannels = None
 
                 if allChannels:
                     for channel in allChannels:
